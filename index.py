@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt
 import pickle as pickle
 #apro il file excel precedentemente caricato
 #Inserisci il nome visualizzato sopra, dopo il caricamento
-# nomefilecaricato="owid-covid-data_sint_beta.xlsx"
-nomefilecaricato="owid-covid-data_sint_beta3.xlsx"
+nomefilecaricato="owid-covid-data_sint_beta.xlsx"
+# nomefilecaricato="owid-covid-data_sint_beta3.xlsx"
 print("Inizio a caricare il file")
 excel_document = openpyxl.load_workbook(nomefilecaricato)
 print("File caricato")
@@ -18,7 +18,7 @@ sheet = excel_document.get_sheet_by_name('Sheet1')
 print("Dataset caricato")
 numRecord=sheet.max_row-1
 print(numRecord)
-daEvitare=["Asia","World"]
+daEvitare=["Asia","World",'North America','South America','Africa','Oceania','Middle East','Latin America','Caribbean']
 valide=["Asia","World"]
 numCol=sheet.max_column
 def getData(sheet,riga):
@@ -28,8 +28,8 @@ def getLocation(sheet,riga):
 def getTotalDeath(sheet,riga):
   return sheet.cell(row=riga,column=5).value
 def nazioneValida(nazione):
-  evitare=False
-  tutte=True
+  evitare=True
+  tutte=False
   if tutte==True:
     return True
   if evitare:
@@ -82,20 +82,6 @@ for nazione in nazioni:
 print("Date mancanti aggiunte")
 print("Date")
 x=np.array(range(0,len(date)))
-hover=HoverTool()
-# hover.tooltips = [
-#     ("index", "$index"),
-#     ("(x,y)", "($x, $y)"),
-#     ("radius", "@radius"),
-#     ("fill color", "$color[hex, swatch]:fill_color"),
-#     ("fill color", "$color[hex]:fill_color"),
-#     ("fill color", "$color:fill_color"),
-#     ("fill color", "$swatch:fill_color"),
-#     ("foo", "@foo"),
-#     ("bar", "@bar"),
-#     ("baz", "@baz{safe}"),
-#     ("total", "@total{$0,0.00}")
-# ]
 # bokeh create custom tooltip function
 from bokeh.plotting import figure, show
 from bokeh.layouts import gridplot, Row
@@ -107,43 +93,49 @@ def create_string_data(date):
     ris=ris[:-1]
     ris+="];"
     return ris
+def get_random_color():
+    from random import randint
+    return '#%02X%02X%02X' % (randint(0, 255), randint(0, 255), randint(0, 255))
 
-code = create_string_data(date)+"""  
-var indices = cb_data.index['1d'].indices;
-console.log(indices);
-if (indices.length > 0){
-    if(plot_tooltip.x_range.bounds == null)
-    {
-        Bokeh.documents[0].add_root(plot_tooltip)
-    }
-    const idx = indices[0]
-    lines.data_source.data['x'] = source.data['xs'][idx]
-    lines.data_source.data['y'] = source.data['ys'][idx]
-    lines.data_source.change.emit();
+ 
+sources=[]
+def formatta_numero(numero):
+  ris=""
+  numeroString=str(numero)
+  indice=0
+  for i in range(len(numeroString)-1,-1,-1):
+    if indice%3==0 and indice!=0:
+      ris+="'"
+    ris+=numeroString[i]
+    indice+=1
+  return ris[::-1]
+# Format data from yyyy-mm-dd to dd-mm-yyyy
+def format_date(date):
+ return date[8:10]+"-"+date[5:7]+"-"+date[0:4] 
+for nazione in nazioni:
+  source = ColumnDataSource(data=dict(
+      x=[i for i in range(0,len(date))],
+      y=[assi_y[nazione][i][0] for i in range(0,len(date))],
+      desc=[format_date(data) for data in date],
+      casi=[formatta_numero(assi_y[nazione][i][0]) for i in range(0,len(date))],
+      nazione=[nazione for i in range(0,len(date))],
+  ))
+  sources.append(source)
+TOOLTIPS = [
+    ("desc", "@desc"),
+    ("casi", "@casi"),
+    ("nazione", "@nazione"),
+]
 
-    circles.data_source.data['x'] = source.data['xs'][idx]
-    circles.data_source.data['y'] = source.data['ys'][idx]
-    circles.data_source.change.emit();  
-
-    div = document.getElementsByClassName('bk-root')[1];
-    console.log("ciao");
-    div.style = "position:absolute; left:" + cb_data.geometry['sx'] + "px; top:" + cb_data.geometry['sy'] + "px;";              
-} """
-
-
-hover = HoverTool()
-hover.tooltips = None
-p = figure(title="COVID cases", x_axis_label='Dates', y_axis_label='Cases', x_range=(0,len(date)),sizing_mode="stretch_width",height=600,tools=[hover])
+# hover.tooltips=prova
+# hover.tooltips = None
+p = figure(title="COVID cases", x_axis_label='Dates', y_axis_label='Cases', x_range=(0,len(date)),sizing_mode="stretch_width",height=600,tooltips=TOOLTIPS)
 p.xaxis.ticker = x
 p.xaxis.major_label_orientation = "vertical"
 p.xaxis.major_label_overrides = {i: (date[i] if i%30==0 else "") for i in range(len(date))}
 print("Genero il grafico")
 linee=[]
-for y in assi_y:
-  valori=[]
-  for asse in assi_y.get(y):
-    valori.append(asse[0])
-  linee.append(p.line(x, valori, legend_label=y, line_width=2))
+for source in sources:
+  p.line('x','y',source=source,color=get_random_color())
 print("Grafico generato")
 show(p)
-callback = CustomJS(args = dict(lines=linee), code = code)
